@@ -4,6 +4,7 @@ import VoiceHub from './components/VoiceHub';
 import Roadmap from './components/RoadMap';
 import MasteryHeatMap from './components/MasteryHeatMap';
 import DailyMission from './components/DailyMission';
+import Textbooks from './components/Textbooks';
 
 function App() {
   const [activeTab, setActiveTab] = useState('study');
@@ -59,6 +60,10 @@ function App() {
               <h2 className="text-xl font-bold mb-4">Account Settings</h2>
               <p className="text-slate-400 italic">Configure your AI voice preference and textbook upload history here.</p>
             </div>
+          )}
+
+          {activeTab === 'library' && (
+            <Textbooks />
           )}
 
         </div>

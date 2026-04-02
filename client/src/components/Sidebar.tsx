@@ -1,4 +1,4 @@
-import { LayoutDashboard, Mic2, BookOpen, BarChart3, Settings, LogOut } from 'lucide-react';
+import { LayoutDashboard, Mic2, BookOpen, BarChart3, Settings, LogOut, Library } from 'lucide-react';
 
 interface SidebarProps {
     activeTab: string;
@@ -8,6 +8,7 @@ interface SidebarProps {
 export default function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
     const menuItems = [
         { id: 'study', label: 'Voice Study', icon: Mic2 },
+        { id: 'library', label: 'My Textbooks', icon: Library },
         { id: 'roadmap', label: 'My Roadmap', icon: BookOpen },
         { id: 'analytics', label: 'Mastery & Stats', icon: BarChart3 },
         { id: 'settings', label: 'Settings', icon: Settings },
@@ -26,8 +27,8 @@ export default function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
                         key={item.id}
                         onClick={() => setActiveTab(item.id)}
                         className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === item.id
-                                ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20'
-                                : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                            ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20'
+                            : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
                             }`}
                     >
                         <item.icon size={20} />
