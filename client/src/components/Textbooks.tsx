@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Upload, FileText, Trash2, CheckCircle2, Loader2, Calendar, BookOpen } from 'lucide-react';
-import { uploadTextbook } from '../api'; // Ensure this points to your api.ts
+import { uploadTextbook, generateRoadmap } from '../api'; // Ensure this points to your api.ts
 import { supabase } from '../supabaseClient';
 
 interface Textbook {
@@ -49,32 +49,33 @@ export default function Textbooks() {
     }, []);
 
     // 2. Handle File Upload to Backend
+    // Inside handleFileUpload in src/components/Textbooks.tsx
+
     const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
-        if (!file) return;
-
-        if (!title) {
-            alert("Please enter a textbook title first!");
-            return;
-        }
+        if (!file || !title) return;
 
         try {
             setIsUploading(true);
             const { data: { user } } = await supabase.auth.getUser();
-            if (!user) throw new Error("You must be logged in to upload.");
+            if (!user) return;
 
-            // Call our FastAPI backend
-            const response = await uploadTextbook(file, user.id, title, examDate);
+            // 1. UPLOAD & VECTORIZE
+            const uploadResult = await uploadTextbook(file, user.id, title, examDate);
+            console.log("Vectorization complete:", uploadResult);
 
-            console.log("Upload Success:", response);
-            alert(`Success! "${title}" has been vectorized into ${response.chunks_processed} AI segments.`);
+            // 2. GENERATE ROADMAP (Triggered automatically)
+            // We pass the new textbook_id we just got back from the upload
+            await generateRoadmap(uploadResult.textbook_id, user.id);
 
-            // Reset form and refresh list
+            alert(`Success! AI has learned your book and generated a custom study plan.`);
+
             setTitle("");
             setExamDate("");
-            fetchBooks();
+            fetchBooks(); // Refresh the library list
+
         } catch (error: any) {
-            alert("Upload failed: " + error.message);
+            alert("Error: " + error.message);
         } finally {
             setIsUploading(false);
         }

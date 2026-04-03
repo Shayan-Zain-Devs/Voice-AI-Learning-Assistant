@@ -21,3 +21,20 @@ export const uploadTextbook = async (file: File, userId: string, title: string, 
 
     return await response.json();
 };
+
+export const generateRoadmap = async (textbookId: string, userId: string) => {
+    const formData = new FormData();
+    formData.append("textbook_id", textbookId);
+    formData.append("user_id", userId);
+
+    const response = await fetch(`${API_URL}/generate-roadmap`, {
+        method: "POST",
+        body: formData,
+    });
+
+    if (!response.ok) {
+        throw new Error("Failed to generate AI roadmap");
+    }
+
+    return await response.json();
+};
