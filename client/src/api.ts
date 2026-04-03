@@ -1,5 +1,17 @@
 const API_URL = "http://localhost:8000";
 
+export interface VoiceSessionResponse {
+    questions: string[];
+    context: string;
+}
+
+export interface QuizReport {
+    score: number;
+    feedback: string;
+    topics_to_review: string[];
+}
+
+
 export const uploadTextbook = async (file: File, userId: string, title: string, examDate?: string) => {
     // Since we are sending a file + text, we must use FormData
     const formData = new FormData();
@@ -36,5 +48,46 @@ export const generateRoadmap = async (textbookId: string, userId: string) => {
         throw new Error("Failed to generate AI roadmap");
     }
 
+    return await response.json();
+};
+
+
+export const startVoiceSession = async (scheduleId: string, textbookId: string): Promise<VoiceSessionResponse> => {
+    const formData = new FormData();
+    formData.append("schedule_id", scheduleId);
+    formData.append("textbook_id", textbookId);
+
+    const response = await fetch(`${API_URL}/voice/start-session`, {
+        method: "POST",
+        body: formData,
+    });
+
+    if (!response.ok) throw new Error("Failed to start voice session");
+    return await response.json();
+};
+
+export const completeVoiceSession = async (
+    userId: string,
+    scheduleId: string,
+    textbookId: string,
+    questions: string[],
+    answers: string[],
+    context: string
+): Promise<QuizReport> => {
+    const formData = new FormData();
+    formData.append("user_id", userId);
+    formData.append("schedule_id", scheduleId);
+    formData.append("textbook_id", textbookId);
+    // Convert arrays to JSON strings so FastAPI can parse them
+    formData.append("questions", JSON.stringify(questions));
+    formData.append("answers", JSON.stringify(answers));
+    formData.append("context", context);
+
+    const response = await fetch(`${API_URL}/voice/complete-session`, {
+        method: "POST",
+        body: formData,
+    });
+
+    if (!response.ok) throw new Error("Failed to evaluate quiz session");
     return await response.json();
 };

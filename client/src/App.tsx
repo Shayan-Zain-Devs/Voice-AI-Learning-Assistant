@@ -12,6 +12,7 @@ function App() {
   const [activeTab, setActiveTab] = useState('study');
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [selectedBookId, setSelectedBookId] = useState<string>("");
 
   useEffect(() => {
     // Check initial session
@@ -73,10 +74,10 @@ function App() {
           {activeTab === 'study' && (
             <div className="grid grid-cols-12 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
               <div className="col-span-8">
-                <VoiceHub />
+                <VoiceHub selectedBookId={selectedBookId} setSelectedBookId={setSelectedBookId} />
               </div>
               <div className="col-span-4">
-                <DailyMission />
+                <DailyMission selectedBookId={selectedBookId} />
               </div>
             </div>
           )}

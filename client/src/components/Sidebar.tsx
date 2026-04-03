@@ -1,4 +1,4 @@
-import { LayoutDashboard, Mic2, BookOpen, BarChart3, Settings, LogOut, Library } from 'lucide-react';
+import { Mic2, BookOpen, BarChart3, Settings, LogOut, Library } from 'lucide-react';
 
 interface SidebarProps {
     activeTab: string;

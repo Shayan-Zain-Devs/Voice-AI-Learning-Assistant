@@ -6,9 +6,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from database import supabase_client
 from services.pdf_processor import process_pdf
 from services.embedder import embeddings
-from services.ai_service import get_ai_response
+from services.ai_service import get_ai_response, generate_voice_quiz, evaluate_quiz_session
 from pypdf import PdfReader
 from datetime import datetime, timedelta
+import json
+
 
 app = FastAPI()
 
@@ -201,4 +203,64 @@ async def generate_roadmap(textbook_id: str = Form(...), user_id: str = Form(...
 
     except Exception as e:
         print(f"Error generating roadmap: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))            
+        raise HTTPException(status_code=500, detail=str(e))    
+
+
+
+
+
+@app.post("/voice/start-session")
+async def start_voice_session(schedule_id: str = Form(...), textbook_id: str = Form(...)):
+    # 1. Get the page range from the schedule
+    sched = supabase_client.table("daily_schedules").select("*").eq("id", schedule_id).single().execute()
+    page_range = sched.data['page_range']
+    start_pg, end_pg = map(int, page_range.split('-'))
+
+    # 2. Fetch context from the specific pages
+    segments = supabase_client.table("textbook_segments") \
+        .select("content") \
+        .eq("textbook_id", textbook_id) \
+        .gte("page_number", start_pg) \
+        .lte("page_number", end_pg) \
+        .limit(5).execute()
+    
+    context = " ".join([s['content'] for s in segments.data])
+
+    # 3. Generate 5 questions
+    questions = await generate_voice_quiz(context, sched.data['passing_criteria'])
+    
+    return {"questions": questions, "context": context}
+
+@app.post("/voice/complete-session")
+async def complete_voice_session(
+    user_id: str = Form(...),
+    schedule_id: str = Form(...),
+    textbook_id: str = Form(...),
+    questions: str = Form(...), # JSON string of list
+    answers: str = Form(...),   # JSON string of list
+    context: str = Form(...)
+):
+    q_list = json.loads(questions)
+    a_list = json.loads(answers)
+
+    # 1. Get the batch evaluation
+    report = await evaluate_quiz_session(q_list, a_list, context)
+
+    # 2. Log to Zain's study_logs (Triggers mastery update automatically)
+    supabase_client.table("study_logs").insert({
+        "user_id": user_id,
+        "schedule_id": schedule_id,
+        "topic": "Daily Voice Quiz",
+        "score": report['score'],
+        "ai_feedback": report['feedback']
+    }).execute()
+
+    # 3. If they failed (< 60%), trigger Zain's Adaptive Logic
+    if report['score'] < 60 and report['topics_to_review']:
+        supabase_client.rpc('adapt_schedule_on_failure', {
+            'p_user_id': user_id,
+            'p_textbook_id': textbook_id,
+            'p_failed_topic': report['topics_to_review'][0]
+        }).execute()
+
+    return report        
