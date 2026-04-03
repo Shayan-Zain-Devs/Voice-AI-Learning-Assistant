@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import Sidebar from './components/SideBar';
+import Sidebar from './components/Sidebar';
 import VoiceHub from './components/VoiceHub';
 import Roadmap from './components/RoadMap';
 import MasteryHeatMap from './components/MasteryHeatMap';
