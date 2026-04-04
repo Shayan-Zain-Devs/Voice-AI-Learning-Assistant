@@ -85,11 +85,7 @@ async def upload_textbook(
 @app.post("/generate-roadmap")
 async def generate_roadmap(textbook_id: str = Form(...), user_id: str = Form(...)):
     try:
-        # 1. FETCH TEXTBOOK DETAILS
         book_res = supabase_client.table("textbooks").select("*").eq("id", textbook_id).single().execute()
-        if not book_res.data:
-            raise HTTPException(status_code=404, detail="Textbook not found")
-            
         book = book_res.data
         total_pages = book['total_pages']
         exam_dt = datetime.strptime(book['exam_date'], '%Y-%m-%d').date()
@@ -97,61 +93,55 @@ async def generate_roadmap(textbook_id: str = Form(...), user_id: str = Form(...
         start_date = today + timedelta(days=1)
         days_available = (exam_dt - start_date).days + 1
         
-        if days_available <= 0:
-            raise HTTPException(status_code=400, detail="Exam date is too close!")
-
         pages_per_day = max(1, total_pages // days_available)
-        print(f"Generating optimized roadmap for {days_available} days...")
 
-        # 2. FETCH OVERVIEW CONTEXT (ONE QUERY)
-        sample_pages = list(range(1, total_pages + 1, max(1, total_pages // 15)))
+        # 1. SAMPLING: Fetch context from 12 distinct spots
+        sample_pages = list(range(5, total_pages, max(1, total_pages // 12)))
         segments_res = supabase_client.table("textbook_segments") \
             .select("content, page_number") \
             .eq("textbook_id", textbook_id) \
             .in_("page_number", sample_pages) \
             .execute()
         
-        context_summary = "\n".join([f"Page {s['page_number']}: {s['content'][:200]}" for s in segments_res.data])
+        context_summary = "\n".join([f"P{s['page_number']}: {s['content'][:150]}" for s in segments_res.data])
 
-        # 3. UPDATED BATCH AI CALL (Requesting nested keywords)
+        # 2. THE PIPE PROMPT: Much more stable than JSON for long lists
         system_prompt = (
-            f"You are an academic planner. I have a book with {total_pages} pages and {days_available} days to study. "
-            f"Generate a nested JSON array where each sub-array contains 3-4 specific technical keywords for that study day. "
-            f"Example for 2 days: [[\"Keyword A\", \"Keyword B\"], [\"Keyword C\", \"Keyword D\"]]. "
-            f"Return EXACTLY {days_available} sub-arrays. Return ONLY the JSON."
+            f"You are a study planner for the book '{book['title']}'. "
+            f"Generate a list of exactly {days_available} study topics (short, 2-3 words each). "
+            f"Separate each topic with a '|' symbol. "
+            f"Return ONLY the topics separated by pipes. Example: Introduction | DFA Basics | NFA Logic"
         )
-        user_prompt = f"Textbook Context Snippets:\n{context_summary}"
+        user_prompt = f"Book Summary:\n{context_summary}"
         
         ai_response = await get_ai_response(system_prompt, user_prompt)
         
-        ai_days_keywords = []
-        try:
-            clean_json = re.sub(r'```json|```', '', ai_response).strip()
-            ai_days_keywords = json.loads(clean_json)
-        except:
-            print("AI parsing failed, using fallback.")
-            ai_days_keywords = [["Core Concepts", "Chapter Review"] for _ in range(days_available)]
+        # 3. ROBUST PARSING (No JSON required)
+        if ai_response and "|" in ai_response:
+            # Split by pipe, clean up whitespace and remove any "Day X:" prefixes the AI might add
+            ai_topics = [re.sub(r'Day \d+:|Day \d+\s*-', '', t).strip() for t in ai_response.split("|")]
+        else:
+            print(f"AI response was messy or empty: {ai_response}")
+            ai_topics = []
 
-        # 4. CONSTRUCT THE SCHEDULE
+        # 4. BUILD THE SCHEDULE
         new_schedules = []
         current_page = 1
-
         for i in range(days_available):
             if current_page > total_pages: break
-
             day_start = current_page
             day_end = min(current_page + pages_per_day - 1, total_pages)
             if i == days_available - 1: day_end = total_pages 
 
-            # Match day to AI keyword sub-array
-            day_keywords = ai_days_keywords[i] if i < len(ai_days_keywords) else ["General Study"]
+            # Get topic from AI list, fallback to dynamic chapter label
+            topic_label = ai_topics[i] if i < len(ai_topics) and len(ai_topics[i]) > 2 else f"Concept Focus P{day_start}"
             
             new_schedules.append({
                 "user_id": user_id,
                 "textbook_id": textbook_id,
                 "scheduled_date": str(start_date + timedelta(days=i)),
                 "page_range": f"{day_start}-{day_end}",
-                "passing_criteria": day_keywords, 
+                "passing_criteria": [topic_label], # Must be a list
                 "status": "pending"
             })
             current_page = day_end + 1
@@ -164,7 +154,7 @@ async def generate_roadmap(textbook_id: str = Form(...), user_id: str = Form(...
         return {"status": "error", "message": "No rows created."}
 
     except Exception as e:
-        print(f"Critical Error: {str(e)}")
+        print(f"Critical Roadmap Error: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
