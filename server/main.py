@@ -10,13 +10,13 @@ from services.ai_service import get_ai_response, generate_voice_quiz, evaluate_q
 from pypdf import PdfReader
 from datetime import datetime, timedelta
 import json
-
+import re
 
 app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"], # Your Vite dev server
+    allow_origins=["http://localhost:5173"], 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -34,27 +34,19 @@ async def upload_textbook(
         shutil.copyfileobj(file.file, buffer)
 
     try:
-        # 1. Get Total Pages
         reader = PdfReader(temp_file)
         total_pages = len(reader.pages)
-
-        # 2. Upload to Storage (Matches your RLS Policy)
-        # Your RLS requires the path to be: 'user_id/filename'
         storage_path = f"{user_id}/{file.filename}"
         
         with open(temp_file, "rb") as f:
             supabase_client.storage.from_("textbooks").upload(
                 path=storage_path,
                 file=f,
-                file_options={
-                    "content-type": "application/pdf",
-                    "upsert": "true"
-                }
+                file_options={"content-type": "application/pdf", "upsert": "true"}
             )
         
         pdf_url = supabase_client.storage.from_("textbooks").get_public_url(storage_path)
 
-        # 3. Create Parent Textbook Record
         textbook_res = supabase_client.table("textbooks").insert({
             "user_id": user_id,
             "title": title,
@@ -64,171 +56,141 @@ async def upload_textbook(
         }).execute()
         
         textbook_id = textbook_res.data[0]['id']
-
-        # 4. Process and Chunk PDF using LangChain
         documents = process_pdf(temp_file)
         
-        # 5. Manual Vectorization & Insertion
-        # We do this manually instead of using LangChain's VectorStore 
-        # so we can fill your EXACT columns: textbook_id and page_number.
-        
         chunks_to_insert = []
-        # Sanitize content for PostgreSQL (remove null characters)
         texts = [doc.page_content.replace("\u0000", "") for doc in documents]
-        
-        # Generate all embeddings at once (efficient)
         vector_list = embeddings.embed_documents(texts)
 
         for i, doc in enumerate(documents):
             chunks_to_insert.append({
                 "textbook_id": textbook_id,
-                "content": texts[i], # Use the sanitized text
+                "content": texts[i],
                 "page_number": doc.metadata.get("page", 0) + 1,
                 "embedding": vector_list[i],
-                "metadata": doc.metadata # keep the rest in the jsonb column
+                "metadata": doc.metadata
             })
 
-        # Bulk insert into textbook_segments
-        supabase_client.table("textbook_segments").insert(chunks_to_insert).execute()
+        # Efficiency Fix: Insert in batches of 100 to avoid Supabase CPU spikes
+        for i in range(0, len(chunks_to_insert), 100):
+            supabase_client.table("textbook_segments").insert(chunks_to_insert[i:i+100]).execute()
 
-        return {
-            "status": "success", 
-            "textbook_id": textbook_id, 
-            "chunks_processed": len(chunks_to_insert)
-        }
+        return {"status": "success", "textbook_id": textbook_id, "chunks_processed": len(chunks_to_insert)}
 
     finally:
         if os.path.exists(temp_file):
             os.remove(temp_file)
 
+
 @app.post("/generate-roadmap")
 async def generate_roadmap(textbook_id: str = Form(...), user_id: str = Form(...)):
     try:
         # 1. FETCH TEXTBOOK DETAILS
-        # We need the total pages and exam date to do the math
         book_res = supabase_client.table("textbooks").select("*").eq("id", textbook_id).single().execute()
-        
         if not book_res.data:
             raise HTTPException(status_code=404, detail="Textbook not found")
             
         book = book_res.data
         total_pages = book['total_pages']
-        
-        # Parse exam date (Format: YYYY-MM-DD)
         exam_dt = datetime.strptime(book['exam_date'], '%Y-%m-%d').date()
         today = datetime.now().date()
-        
-        # 2. CALCULATE DURATION
-        # We start the schedule from tomorrow
         start_date = today + timedelta(days=1)
         days_available = (exam_dt - start_date).days + 1
         
         if days_available <= 0:
-            raise HTTPException(status_code=400, detail="Exam date is too close or in the past!")
+            raise HTTPException(status_code=400, detail="Exam date is too close!")
 
-        # 3. CALCULATE PAGES PER DAY
         pages_per_day = max(1, total_pages // days_available)
+        print(f"Generating optimized roadmap for {days_available} days...")
+
+        # 2. FETCH OVERVIEW CONTEXT (ONE QUERY)
+        sample_pages = list(range(1, total_pages + 1, max(1, total_pages // 15)))
+        segments_res = supabase_client.table("textbook_segments") \
+            .select("content, page_number") \
+            .eq("textbook_id", textbook_id) \
+            .in_("page_number", sample_pages) \
+            .execute()
         
+        context_summary = "\n".join([f"Page {s['page_number']}: {s['content'][:200]}" for s in segments_res.data])
+
+        # 3. UPDATED BATCH AI CALL (Requesting nested keywords)
+        system_prompt = (
+            f"You are an academic planner. I have a book with {total_pages} pages and {days_available} days to study. "
+            f"Generate a nested JSON array where each sub-array contains 3-4 specific technical keywords for that study day. "
+            f"Example for 2 days: [[\"Keyword A\", \"Keyword B\"], [\"Keyword C\", \"Keyword D\"]]. "
+            f"Return EXACTLY {days_available} sub-arrays. Return ONLY the JSON."
+        )
+        user_prompt = f"Textbook Context Snippets:\n{context_summary}"
+        
+        ai_response = await get_ai_response(system_prompt, user_prompt)
+        
+        ai_days_keywords = []
+        try:
+            clean_json = re.sub(r'```json|```', '', ai_response).strip()
+            ai_days_keywords = json.loads(clean_json)
+        except:
+            print("AI parsing failed, using fallback.")
+            ai_days_keywords = [["Core Concepts", "Chapter Review"] for _ in range(days_available)]
+
+        # 4. CONSTRUCT THE SCHEDULE
         new_schedules = []
         current_page = 1
 
-        print(f"Generating {days_available} days of study for {total_pages} pages...")
-
-        # 4. LOOP THROUGH EACH DAY
         for i in range(days_available):
-            if current_page > total_pages:
-                break
+            if current_page > total_pages: break
 
-            day_start_page = current_page
-            day_end_page = min(current_page + pages_per_day - 1, total_pages)
-            # Ensure the last day finishes the book
-            if i == days_available - 1:
-                day_end_page = total_pages
-                
-            scheduled_date = start_date + timedelta(days=i)
+            day_start = current_page
+            day_end = min(current_page + pages_per_day - 1, total_pages)
+            if i == days_available - 1: day_end = total_pages 
 
-            # 5. FETCH AI CONTEXT
-            # We fetch a few chunks from these pages so the AI knows what's in them
-            segments = supabase_client.table("textbook_segments") \
-                .select("content") \
-                .eq("textbook_id", textbook_id) \
-                .gte("page_number", day_start_page) \
-                .lte("page_number", day_end_page) \
-                .limit(3).execute()
+            # Match day to AI keyword sub-array
+            day_keywords = ai_days_keywords[i] if i < len(ai_days_keywords) else ["General Study"]
             
-            context_text = " ".join([s['content'][:300] for s in segments.data])
-
-            # 6. CALL OPENROUTER (QWEN) FOR KEYWORDS
-            # This fills Zain's 'passing_criteria' array
-            system_prompt = "You are an expert academic tutor. Extract 3-4 specific technical keywords or topics from the provided text. Return ONLY the keywords separated by commas."
-            user_prompt = f"Text Context: {context_text}"
-            
-            # Add a small delay to avoid rate limiting on free tier models
-            await asyncio.sleep(2)
-            
-            ai_keywords = await get_ai_response(system_prompt, user_prompt)
-            
-            # Clean AI response into a list of strings
-            if ai_keywords:
-                # Remove quotes, periods, and split by comma
-                clean_list = [k.strip().replace('"', '').replace('.', '') for k in ai_keywords.split(",")]
-                # Limit to 4 keywords to keep the UI clean
-                passing_criteria = clean_list[:4]
-            else:
-                passing_criteria = ["General Reading", "Core Concepts"]
-
-            # 7. PREPARE DB ROW (Matching Zain's Schema)
             new_schedules.append({
                 "user_id": user_id,
                 "textbook_id": textbook_id,
-                "scheduled_date": str(scheduled_date),
-                "page_range": f"{day_start_page}-{day_end_page}",
-                "passing_criteria": passing_criteria, # Postgres TEXT[] array
+                "scheduled_date": str(start_date + timedelta(days=i)),
+                "page_range": f"{day_start}-{day_end}",
+                "passing_criteria": day_keywords, 
                 "status": "pending"
             })
-            
-            current_page = day_end_page + 1
+            current_page = day_end + 1
 
-        # 8. BULK INSERT INTO DAILY_SCHEDULES
+        # 5. BULK INSERT
         if new_schedules:
-            insert_res = supabase_client.table("daily_schedules").insert(new_schedules).execute()
-            return {
-                "status": "success", 
-                "days_generated": len(new_schedules),
-                "start_date": str(start_date),
-                "end_date": str(exam_dt)
-            }
+            supabase_client.table("daily_schedules").insert(new_schedules).execute()
+            return {"status": "success", "days_generated": len(new_schedules)}
         
-        return {"status": "error", "message": "No schedule rows were created."}
+        return {"status": "error", "message": "No rows created."}
 
     except Exception as e:
-        print(f"Error generating roadmap: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))    
-
-
-
+        print(f"Critical Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/voice/start-session")
 async def start_voice_session(schedule_id: str = Form(...), textbook_id: str = Form(...)):
-    # 1. Get the page range from the schedule
     sched = supabase_client.table("daily_schedules").select("*").eq("id", schedule_id).single().execute()
     page_range = sched.data['page_range']
-    start_pg, end_pg = map(int, page_range.split('-'))
 
-    # 2. Fetch context from the specific pages
-    segments = supabase_client.table("textbook_segments") \
-        .select("content") \
-        .eq("textbook_id", textbook_id) \
-        .gte("page_number", start_pg) \
-        .lte("page_number", end_pg) \
-        .limit(5).execute()
-    
+    # CRASH-PROOF LOGIC
+    if "-" in page_range:
+        try:
+            start_pg, end_pg = map(int, page_range.split('-'))
+            segments = supabase_client.table("textbook_segments") \
+                .select("content") \
+                .eq("textbook_id", textbook_id) \
+                .gte("page_number", start_pg) \
+                .lte("page_number", end_pg) \
+                .limit(8).execute()
+        except:
+            segments = supabase_client.table("textbook_segments").select("content").eq("textbook_id", textbook_id).limit(8).execute()
+    else:
+        # If it's REVISION or anything else, just grab 8 relevant segments from the book
+        segments = supabase_client.table("textbook_segments").select("content").eq("textbook_id", textbook_id).limit(8).execute()
+
     context = " ".join([s['content'] for s in segments.data])
-
-    # 3. Generate 5 questions
     questions = await generate_voice_quiz(context, sched.data['passing_criteria'])
-    
     return {"questions": questions, "context": context}
 
 @app.post("/voice/complete-session")

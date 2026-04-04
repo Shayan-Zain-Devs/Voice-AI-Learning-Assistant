@@ -80,29 +80,38 @@ async def generate_voice_quiz(context: str, topics: list):
         return ["Error generating quiz. Please try again."]
 
 async def evaluate_quiz_session(questions: list, answers: list, context: str):
-    """
-    Evaluates all 5 answers at once and returns a final report.
-    """
-    # Create a transcript for the AI to read
     transcript = ""
     for i in range(len(questions)):
         transcript += f"Q{i+1}: {questions[i]}\nStudent A{i+1}: {answers[i]}\n\n"
 
     system_prompt = (
-        "You are an expert academic examiner. You will be provided with a transcript of a 5-question oral exam. "
-        "Compare the student's answers against the provided textbook context. "
-        "Calculate an overall score (0-100) based on accuracy and depth. "
-        "Provide a summary feedback (max 2 sentences) and a list of 'Topics to Review' if they missed anything. "
-        "Return ONLY a JSON object: {\"score\": int, \"feedback\": \"string\", \"topics_to_review\": [\"string\"]}"
+        "You are an academic examiner. Evaluate the transcript against the context. "
+        "Calculate an overall score (0-100). Provide feedback (max 2 sentences). "
+        "Return ONLY a JSON object. No other text. "
+        "Format: {\"score\": int, \"feedback\": \"string\", \"topics_to_review\": [\"string\"]}"
     )
     
-    user_prompt = f"TEXTBOOK CONTEXT:\n{context}\n\nEXAM TRANSCRIPT:\n{transcript}"
+    # We truncate the context to ensure the AI doesn't get overwhelmed
+    user_prompt = f"TEXTBOOK CONTEXT (Excerpt):\n{context[:3000]}\n\nEXAM TRANSCRIPT:\n{transcript}"
     
     raw_response = await get_ai_response(system_prompt, user_prompt)
     
+    if not raw_response:
+        return {"score": 0, "feedback": "AI Service Timeout. Please try again.", "topics_to_review": []}
+
     try:
-        clean_json = re.sub(r'```json|```', '', raw_response).strip()
-        return json.loads(clean_json)
+        # ADVANCED JSON EXTRACTION: Find the first '{' and last '}'
+        # This prevents the "Evaluation failed" error if the AI adds extra text.
+        match = re.search(r'\{.*\}', raw_response, re.DOTALL)
+        if match:
+            json_str = match.group(0)
+            return json.loads(json_str)
+        else:
+            raise ValueError("No JSON found in response")
+            
     except Exception as e:
-        print(f"Session Evaluation Error: {e}")
-        return {"score": 0, "feedback": "Evaluation failed. Please try again.", "topics_to_review": []}
+        print(f"Session Evaluation Error: {e} | Raw: {raw_response}")
+        # Secondary Fallback: Try to find a score number manually if JSON is totally broken
+        score_match = re.search(r'"score":\s*(\d+)', raw_response)
+        score = int(score_match.group(1)) if score_match else 0
+        return {"score": score, "feedback": "Evaluation processed with fallback logic.", "topics_to_review": []}

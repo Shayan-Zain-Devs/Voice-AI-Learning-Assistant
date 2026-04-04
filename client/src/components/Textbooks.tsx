@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Upload, FileText, Trash2, CheckCircle2, Loader2, Calendar, BookOpen } from 'lucide-react';
-import { uploadTextbook, generateRoadmap } from '../api'; // Ensure this points to your api.ts
+import { uploadTextbook, generateRoadmap } from '../api';
 import { supabase } from '../supabaseClient';
 
 interface Textbook {
@@ -12,17 +12,22 @@ interface Textbook {
     exam_date: string;
 }
 
-export default function Textbooks() {
+interface TextbooksProps {
+    isGlobalProcessing: boolean;
+    setIsGlobalProcessing: (val: boolean) => void;
+    setUploadProgress: (val: number) => void;
+}
+
+export default function Textbooks({ isGlobalProcessing, setIsGlobalProcessing, setUploadProgress }: TextbooksProps) {
     // Form State
     const [title, setTitle] = useState("");
     const [examDate, setExamDate] = useState("");
 
     // UI State
-    const [isUploading, setIsUploading] = useState(false);
     const [fetchLoading, setFetchLoading] = useState(true);
     const [books, setBooks] = useState<Textbook[]>([]);
 
-    // 1. Fetch textbooks from Supabase on load
+    // 1. Fetch textbooks from Supabase
     const fetchBooks = async () => {
         try {
             setFetchLoading(true);
@@ -48,43 +53,65 @@ export default function Textbooks() {
         fetchBooks();
     }, []);
 
-    // 2. Handle File Upload to Backend
-    // Inside handleFileUpload in src/components/Textbooks.tsx
-
+    // 2. Handle File Upload with Multi-Stage Progress Bar
     const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
         const file = event.target.files?.[0];
         if (!file || !title) return;
 
+        let vectorTimer: any;
+        let roadmapTimer: any;
+
         try {
-            setIsUploading(true);
+            setIsGlobalProcessing(true);
+            setUploadProgress(5); // Initial jump
+
             const { data: { user } } = await supabase.auth.getUser();
             if (!user) return;
 
-            // 1. UPLOAD & VECTORIZE
-            const uploadResult = await uploadTextbook(file, user.id, title, examDate);
-            console.log("Vectorization complete:", uploadResult);
+            // --- PHASE 1: VECTORIZATION (5% to 45%) ---
+            // Slowly crawls while backend is chunking and embedding
+            vectorTimer = setInterval(() => {
+                setUploadProgress(prev => (prev < 45 ? prev + 1 : prev));
+            }, 800);
 
-            // 2. GENERATE ROADMAP (Triggered automatically)
-            // We pass the new textbook_id we just got back from the upload
+            const uploadResult = await uploadTextbook(file, user.id, title, examDate);
+            
+            clearInterval(vectorTimer);
+            setUploadProgress(50); // Hard jump once upload/vectorization is done
+
+            // --- PHASE 2: AI ROADMAP GENERATION (50% to 95%) ---
+            // Crawls while AI is brainstorming the keywords
+            roadmapTimer = setInterval(() => {
+                setUploadProgress(prev => (prev < 95 ? prev + 4 : prev));
+            }, 600);
+
             await generateRoadmap(uploadResult.textbook_id, user.id);
 
-            alert(`Success! AI has learned your book and generated a custom study plan.`);
+            clearInterval(roadmapTimer);
+            setUploadProgress(100); // Success!
 
-            setTitle("");
-            setExamDate("");
-            fetchBooks(); // Refresh the library list
+            // Final delay so user sees "100%" before cleanup
+            setTimeout(() => {
+                setIsGlobalProcessing(false);
+                setUploadProgress(0);
+                setTitle("");
+                setExamDate("");
+                fetchBooks(); // Refresh library
+                alert(`Success! AI has learned "${title}" and generated your study plan.`);
+            }, 1000);
 
         } catch (error: any) {
+            clearInterval(vectorTimer);
+            clearInterval(roadmapTimer);
             alert("Error: " + error.message);
-        } finally {
-            setIsUploading(false);
+            setIsGlobalProcessing(false);
+            setUploadProgress(0);
         }
     };
 
-    // 3. Handle Delete (Optional but good for management)
+    // 3. Handle Delete
     const handleDelete = async (id: string) => {
-        if (!confirm("Are you sure you want to remove this textbook? All AI embeddings will be deleted.")) return;
-
+        if (!confirm("Are you sure? This will delete all AI knowledge of this book.")) return;
         try {
             const { error } = await supabase.from('textbooks').delete().eq('id', id);
             if (error) throw error;
@@ -109,7 +136,7 @@ export default function Textbooks() {
                         <label className="text-xs text-slate-500 uppercase font-bold ml-1">Book Title</label>
                         <input
                             type="text"
-                            placeholder="e.g. Database Systems"
+                            placeholder="e.g. Quantum Physics"
                             className="bg-slate-900 border border-slate-800 p-3 rounded-xl focus:border-blue-500 outline-none transition"
                             value={title}
                             onChange={(e) => setTitle(e.target.value)}
@@ -128,16 +155,16 @@ export default function Textbooks() {
 
                 {/* DRAG & DROP ZONE */}
                 <label className={`
-          relative group cursor-pointer overflow-hidden
-          bg-slate-900 border-2 border-dashed border-slate-800 rounded-3xl p-12 
-          flex flex-col items-center justify-center 
-          hover:border-blue-500/50 transition-all
-          ${isUploading ? 'opacity-50 pointer-events-none' : ''}
-        `}>
+                    relative group cursor-pointer overflow-hidden
+                    bg-slate-900 border-2 border-dashed border-slate-800 rounded-3xl p-12 
+                    flex flex-col items-center justify-center 
+                    hover:border-blue-500/50 transition-all
+                    ${isGlobalProcessing ? 'opacity-50 pointer-events-none' : ''}
+                `}>
                     <div className="absolute inset-0 bg-blue-600/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
 
                     <div className="w-16 h-16 bg-blue-600/10 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                        {isUploading ? (
+                        {isGlobalProcessing ? (
                             <Loader2 className="text-blue-500 animate-spin" size={32} />
                         ) : (
                             <Upload className="text-blue-500" size={32} />
@@ -145,12 +172,12 @@ export default function Textbooks() {
                     </div>
 
                     <h3 className="text-xl font-semibold mb-2 relative z-10">
-                        {isUploading ? "AI is Processing..." : "Upload PDF Textbook"}
+                        {isGlobalProcessing ? "AI Engine Running..." : "Upload PDF Textbook"}
                     </h3>
                     <p className="text-slate-400 text-center max-w-sm text-sm relative z-10">
-                        {isUploading
-                            ? "We are splitting text and generating 768-dim vectors. This takes about 30 seconds..."
-                            : "Drag and drop your syllabus or textbook. AI will learn it instantly."}
+                        {isGlobalProcessing
+                            ? "Splitting text into 768-dim vectors and generating roadmap. Check the progress bar at the top!"
+                            : "Click to upload your textbook. AI will learn it instantly."}
                     </p>
 
                     <input
@@ -158,7 +185,7 @@ export default function Textbooks() {
                         className="hidden"
                         accept=".pdf"
                         onChange={handleFileUpload}
-                        disabled={isUploading || !title}
+                        disabled={isGlobalProcessing || !title}
                     />
                 </label>
             </section>
