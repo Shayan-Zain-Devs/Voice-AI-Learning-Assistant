@@ -29,14 +29,21 @@ async def upload_textbook(
     title: str = Form(...),
     exam_date: str = Form(None)
 ):
+    def get_time(): return datetime.now().strftime("%H:%M:%S")
+    print(f"[{get_time()}] Phase 1: Starting upload for '{title}' (User: {user_id})")
+    
     temp_file = f"temp_{file.filename}"
     with open(temp_file, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
+    print(f"[{get_time()}] Phase 1: Temporary file '{temp_file}' created.")
 
     try:
         reader = PdfReader(temp_file)
         total_pages = len(reader.pages)
+        print(f"[{get_time()}] Phase 2: PDF read successful. Total pages: {total_pages}")
+
         storage_path = f"{user_id}/{file.filename}"
+        print(f"[{get_time()}] Phase 3: Uploading to Supabase Storage: {storage_path}")
         
         with open(temp_file, "rb") as f:
             supabase_client.storage.from_("textbooks").upload(
@@ -46,6 +53,7 @@ async def upload_textbook(
             )
         
         pdf_url = supabase_client.storage.from_("textbooks").get_public_url(storage_path)
+        print(f"[{get_time()}] Phase 3: Storage upload complete. URL: {pdf_url}")
 
         textbook_res = supabase_client.table("textbooks").insert({
             "user_id": user_id,
@@ -56,11 +64,18 @@ async def upload_textbook(
         }).execute()
         
         textbook_id = textbook_res.data[0]['id']
+        print(f"[{get_time()}] Phase 4: Database record created. ID: {textbook_id}")
+
+        print(f"[{get_time()}] Phase 5: Processing PDF text segments...")
         documents = process_pdf(temp_file)
+        print(f"[{get_time()}] Phase 5: PDF processed into {len(documents)} segments.")
         
         chunks_to_insert = []
         texts = [doc.page_content.replace("\u0000", "") for doc in documents]
+        
+        print(f"[{get_time()}] Phase 6: Generating embeddings for {len(texts)} chunks...")
         vector_list = embeddings.embed_documents(texts)
+        print(f"[{get_time()}] Phase 6: Embeddings generated.")
 
         for i, doc in enumerate(documents):
             chunks_to_insert.append({
@@ -72,10 +87,18 @@ async def upload_textbook(
             })
 
         # Efficiency Fix: Insert in batches of 100 to avoid Supabase CPU spikes
+        print(f"[{get_time()}] Phase 7: Inserting {len(chunks_to_insert)} chunks into 'textbook_segments'...")
         for i in range(0, len(chunks_to_insert), 100):
+            batch_num = (i // 100) + 1
+            print(f"          > Batch {batch_num} (Lines {i} to {min(i+100, len(chunks_to_insert))})")
             supabase_client.table("textbook_segments").insert(chunks_to_insert[i:i+100]).execute()
 
+        print(f"[{get_time()}] Phase 8: Upload and processing complete!")
         return {"status": "success", "textbook_id": textbook_id, "chunks_processed": len(chunks_to_insert)}
+
+    except Exception as e:
+        print(f"[{get_time()}] ERROR during upload: {str(e)}")
+        raise e
 
     finally:
         if os.path.exists(temp_file):
@@ -90,7 +113,7 @@ async def generate_roadmap(textbook_id: str = Form(...), user_id: str = Form(...
         total_pages = book['total_pages']
         exam_dt = datetime.strptime(book['exam_date'], '%Y-%m-%d').date()
         today = datetime.now().date()
-        start_date = today + timedelta(days=1)
+        start_date = today
         days_available = (exam_dt - start_date).days + 1
         
         pages_per_day = max(1, total_pages // days_available)

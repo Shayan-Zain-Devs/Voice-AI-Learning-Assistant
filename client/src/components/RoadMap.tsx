@@ -100,7 +100,7 @@ export default function Roadmap() {
                                             {new Date(day.scheduled_date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
                                         </div>
                                         <h3 className="text-xl font-bold group-hover:text-blue-400 transition-colors">
-                                            Read Pages {day.page_range}
+                                            {day.passing_criteria?.[0] || `Read Pages ${day.page_range}`}
                                         </h3>
                                     </div>
 
@@ -111,9 +111,12 @@ export default function Roadmap() {
                                     </div>
                                 </div>
 
-                                <div className="flex flex-wrap gap-2">
-                                    {day.passing_criteria?.map((topic: string) => (
-                                        <span key={topic} className="bg-slate-800/50 text-slate-400 px-3 py-1 rounded-md text-[10px] font-medium border border-slate-800">
+                                <div className="flex flex-wrap gap-2 text-[10px] font-medium">
+                                    <span className="bg-blue-500/10 text-blue-400 px-3 py-1 rounded-md border border-blue-500/20">
+                                        Pages {day.page_range}
+                                    </span>
+                                    {day.passing_criteria?.slice(1).map((topic: string) => (
+                                        <span key={topic} className="bg-slate-800/50 text-slate-400 px-3 py-1 rounded-md border border-slate-800">
                                             {topic}
                                         </span>
                                     ))}

@@ -9,7 +9,7 @@ load_dotenv()
 OPENROUTER_KEY = os.getenv("OPENROUTER_API_KEY")
 # You can change this to "openai/gpt-4o" later
 # Change this line in ai_service.py
-MODEL_NAME = "google/gemma-2-9b-it:free" 
+MODEL_NAME = "nvidia/nemotron-3-super-120b-a12b:free" 
 
 async def get_ai_response(system_prompt: str, user_prompt: str):
     headers = {

@@ -11,7 +11,7 @@ interface TodayTask {
 
 interface VoiceHubProps {
     selectedBookId: string;
-    setSelectedBookId: (id: string) => void;
+    setSelectedBookId: React.Dispatch<React.SetStateAction<string>>;
 }
 
 export default function VoiceHub({ selectedBookId, setSelectedBookId }: VoiceHubProps) {

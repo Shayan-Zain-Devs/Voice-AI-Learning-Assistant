@@ -14,8 +14,8 @@ interface Textbook {
 
 interface TextbooksProps {
     isGlobalProcessing: boolean;
-    setIsGlobalProcessing: (val: boolean) => void;
-    setUploadProgress: (val: number) => void;
+    setIsGlobalProcessing: React.Dispatch<React.SetStateAction<boolean>>;
+    setUploadProgress: React.Dispatch<React.SetStateAction<number>>;
 }
 
 export default function Textbooks({ isGlobalProcessing, setIsGlobalProcessing, setUploadProgress }: TextbooksProps) {
