@@ -78,10 +78,17 @@ function App() {
               setIsGlobalProcessing={setIsGlobalProcessing} 
               setUploadProgress={setUploadProgress} 
               isGlobalProcessing={isGlobalProcessing}
+              setSelectedBookId={setSelectedBookId}
+              setActiveTab={setActiveTab}
             />
           )}
 
-          {activeTab === 'roadmap' && <Roadmap />}
+          {activeTab === 'roadmap' && (
+            <Roadmap 
+              selectedBookId={selectedBookId} 
+              setSelectedBookId={setSelectedBookId} 
+            />
+          )}
           {activeTab === 'analytics' && <MasteryHeatMap />}
           {activeTab === 'settings' && (
             <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800">

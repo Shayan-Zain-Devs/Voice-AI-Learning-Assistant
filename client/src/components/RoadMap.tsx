@@ -2,9 +2,13 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient';
 import { Calendar, BookOpen, CheckCircle2, Clock, ChevronDown, Loader2 } from 'lucide-react';
 
-export default function Roadmap() {
+interface RoadmapProps {
+    selectedBookId: string;
+    setSelectedBookId: (id: string) => void;
+}
+
+export default function Roadmap({ selectedBookId, setSelectedBookId }: RoadmapProps) {
     const [books, setBooks] = useState<any[]>([]); // List of all uploaded books
-    const [selectedBookId, setSelectedBookId] = useState<string>(""); // Current filter
     const [schedule, setSchedule] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -21,13 +25,14 @@ export default function Roadmap() {
 
             if (userBooks && userBooks.length > 0) {
                 setBooks(userBooks);
-                setSelectedBookId(userBooks[0].id); // Default to the first book
+                // If nothing is selected globally, default to the first one
+                if (!selectedBookId) setSelectedBookId(userBooks[0].id);
             } else {
                 setLoading(false);
             }
         }
         init();
-    }, []);
+    }, [selectedBookId]);
 
     // 2. Fetch the specific roadmap whenever the selectedBookId changes
     useEffect(() => {

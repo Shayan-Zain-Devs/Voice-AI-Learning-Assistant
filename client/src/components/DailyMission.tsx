@@ -63,16 +63,26 @@ export default function DailyMission({ selectedBookId }: DailyMissionProps) {
 
             <div className="space-y-4">
                 <div>
-                    <p className="text-3xl font-black text-white">Pages {mission.page_range}</p>
-                    <div className="flex items-center gap-2 text-slate-400 text-sm mt-1 font-medium">
-                        <BookOpen size={14} />
+                    <p className="text-2xl font-black text-white leading-tight mb-1">
+                        {mission.passing_criteria?.[0] || `Pages ${mission.page_range}`}
+                    </p>
+                    <div className="flex items-center gap-2 text-slate-400 text-xs font-medium">
+                        <BookOpen size={12} className="text-blue-500/50" />
                         {mission.textbooks?.title}
                     </div>
                 </div>
 
                 <div className="flex flex-wrap gap-2">
-                    {mission.passing_criteria?.map((topic: string) => (
-                        <span key={topic} className="bg-blue-500/10 text-blue-400 border border-blue-500/20 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-tighter">
+                    {/* Show pages as a tag if the title is now the topic */}
+                    {mission.passing_criteria?.[0] && (
+                        <span className="bg-blue-500/10 text-blue-400 border border-blue-500/20 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-tighter">
+                            Pages {mission.page_range}
+                        </span>
+                    )}
+                    
+                    {/* Show other topics if they exist */}
+                    {mission.passing_criteria?.slice(1).map((topic: string) => (
+                        <span key={topic} className="bg-slate-800/40 text-slate-400 border border-slate-800 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-tighter">
                             #{topic}
                         </span>
                     ))}

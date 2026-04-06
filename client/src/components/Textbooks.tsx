@@ -16,9 +16,17 @@ interface TextbooksProps {
     isGlobalProcessing: boolean;
     setIsGlobalProcessing: React.Dispatch<React.SetStateAction<boolean>>;
     setUploadProgress: React.Dispatch<React.SetStateAction<number>>;
+    setSelectedBookId: (id: string) => void;
+    setActiveTab: (tab: string) => void;
 }
 
-export default function Textbooks({ isGlobalProcessing, setIsGlobalProcessing, setUploadProgress }: TextbooksProps) {
+export default function Textbooks({ 
+    isGlobalProcessing, 
+    setIsGlobalProcessing, 
+    setUploadProgress,
+    setSelectedBookId,
+    setActiveTab 
+}: TextbooksProps) {
     // Form State
     const [title, setTitle] = useState("");
     const [examDate, setExamDate] = useState("");
@@ -96,8 +104,9 @@ export default function Textbooks({ isGlobalProcessing, setIsGlobalProcessing, s
                 setUploadProgress(0);
                 setTitle("");
                 setExamDate("");
+                setSelectedBookId(uploadResult.textbook_id); // AUTO-SELECT
+                setActiveTab('study'); // AUTO-NAVIGATE TO MISSION
                 fetchBooks(); // Refresh library
-                alert(`Success! AI has learned "${title}" and generated your study plan.`);
             }, 1000);
 
         } catch (error: any) {
