@@ -15,10 +15,10 @@ export default function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
     ];
 
     return (
-        <aside className="w-64 h-screen bg-slate-900 border-r border-slate-800 flex flex-col fixed left-0 top-0">
+        <aside className="w-64 h-screen bg-bg-card border-r border-border-color flex flex-col fixed left-0 top-0 z-20">
             <div className="p-6 flex items-center gap-3">
-                <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center font-bold">A</div>
-                <span className="text-xl font-bold tracking-tight">AI Assistant</span>
+                <div className="w-8 h-8 bg-accent-lime rounded-lg flex items-center justify-center font-bold text-black shadow-[0_0_15px_rgba(190,242,100,0.3)]">A</div>
+                <span className="text-xl font-bold tracking-tight text-white">AI Assistant</span>
             </div>
 
             <nav className="flex-1 px-4 space-y-2 mt-4">
@@ -27,18 +27,18 @@ export default function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
                         key={item.id}
                         onClick={() => setActiveTab(item.id)}
                         className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all ${activeTab === item.id
-                            ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/20'
-                            : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
+                            ? 'bg-accent-lime text-black shadow-lg shadow-accent-lime/20 font-bold'
+                            : 'text-slate-500 hover:bg-white/5 hover:text-slate-200'
                             }`}
                     >
-                        <item.icon size={20} />
+                        <item.icon size={20} className={activeTab === item.id ? 'text-black' : 'text-slate-500'} />
                         <span className="font-medium">{item.label}</span>
                     </button>
                 ))}
             </nav>
 
-            <div className="p-4 border-t border-slate-800">
-                <button className="w-full flex items-center gap-3 px-4 py-3 text-slate-400 hover:text-red-400 transition">
+            <div className="p-4 border-t border-border-color">
+                <button className="w-full flex items-center gap-3 px-4 py-3 text-slate-500 hover:text-red-400 transition">
                     <LogOut size={20} />
                     <span>Logout</span>
                 </button>

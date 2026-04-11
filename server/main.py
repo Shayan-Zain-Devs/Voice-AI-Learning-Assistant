@@ -230,12 +230,14 @@ async def complete_voice_session(
         "ai_feedback": report['feedback']
     }).execute()
 
-    # 3. If they failed (< 60%), trigger Zain's Adaptive Logic
-    if report['score'] < 60 and report['topics_to_review']:
-        supabase_client.rpc('adapt_schedule_on_failure', {
-            'p_user_id': user_id,
-            'p_textbook_id': textbook_id,
-            'p_failed_topic': report['topics_to_review'][0]
-        }).execute()
+   # 3. NEW LOGIC: Only mark the schedule as 'completed' if they pass!
+    # If they fail, status stays 'pending', allowing them to retake it immediately.
+    if report['score'] >= 60:
+        supabase_client.table("daily_schedules") \
+            .update({"status": "completed"}) \
+            .eq("id", schedule_id).execute()
+        print(f"User {user_id} passed! Task {schedule_id} marked as completed.")
+    else:
+        print(f"User {user_id} failed. Task {schedule_id} remains pending for retake.")
 
     return report        

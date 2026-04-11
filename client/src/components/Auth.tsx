@@ -49,16 +49,16 @@ export default function Auth() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
+    <div className="min-h-screen bg-bg-main flex flex-col items-center justify-center p-4">
       {/* Logo Section */}
       <div className="mb-8 flex flex-col items-center">
-        <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center font-bold text-3xl shadow-lg shadow-blue-900/20 mb-4">A</div>
-        <h1 className="text-2xl font-bold text-white tracking-tight">AI Study <span className="text-blue-500">Assistant</span></h1>
+        <div className="w-16 h-16 bg-accent-lime rounded-2xl flex items-center justify-center font-bold text-3xl text-black shadow-lg shadow-accent-lime/20 mb-4">A</div>
+        <h1 className="text-2xl font-bold text-white tracking-tight">AI Study <span className="text-accent-lime">Assistant</span></h1>
         <p className="text-slate-500 text-sm mt-2">{isSignUp ? 'Create your student account' : 'Welcome back, student'}</p>
       </div>
 
       {/* Auth Card */}
-      <div className="w-full max-w-md bg-slate-900 border border-slate-800 p-8 rounded-3xl shadow-2xl">
+      <div className="w-full max-w-md bg-bg-card border border-border-color p-8 rounded-3xl shadow-2xl">
         <form onSubmit={handleAuth} className="space-y-5">
           
           {isSignUp && (
@@ -69,7 +69,7 @@ export default function Auth() {
                   type="text"
                   placeholder="Full Name"
                   required
-                  className="w-full bg-slate-800 border border-slate-700 p-3 pl-11 rounded-xl focus:border-blue-500 outline-none transition"
+                  className="w-full bg-bg-main border border-border-color p-3 pl-11 rounded-xl focus:border-accent-lime outline-none transition text-white"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
                 />
@@ -80,7 +80,7 @@ export default function Auth() {
                   type="text"
                   placeholder="CMS ID (e.g. 507257)"
                   required
-                  className="w-full bg-slate-800 border border-slate-700 p-3 pl-11 rounded-xl focus:border-blue-500 outline-none transition"
+                  className="w-full bg-bg-main border border-border-color p-3 pl-11 rounded-xl focus:border-accent-lime outline-none transition text-white"
                   value={cmsId}
                   onChange={(e) => setCmsId(e.target.value)}
                 />
@@ -94,7 +94,7 @@ export default function Auth() {
               type="email"
               placeholder="University Email"
               required
-              className="w-full bg-slate-800 border border-slate-700 p-3 pl-11 rounded-xl focus:border-blue-500 outline-none transition"
+              className="w-full bg-black border border-border-color p-3 pl-11 rounded-xl focus:border-accent-lime outline-none transition text-white"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
@@ -106,7 +106,7 @@ export default function Auth() {
               type="password"
               placeholder="Password"
               required
-              className="w-full bg-slate-800 border border-slate-700 p-3 pl-11 rounded-xl focus:border-blue-500 outline-none transition"
+              className="w-full bg-black border border-border-color p-3 pl-11 rounded-xl focus:border-accent-lime outline-none transition text-white"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
@@ -115,7 +115,7 @@ export default function Auth() {
           <button
             type="submit"
             disabled={loading}
-            className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-900/20 transition flex items-center justify-center gap-2"
+            className="w-full bg-accent-lime hover:brightness-110 text-black font-bold py-4 rounded-xl shadow-lg shadow-accent-lime/20 transition flex items-center justify-center gap-2"
           >
             {loading ? (
               <Loader2 className="animate-spin" size={20} />
@@ -127,10 +127,10 @@ export default function Auth() {
           </button>
         </form>
 
-        <div className="mt-8 pt-6 border-t border-slate-800 text-center">
+        <div className="mt-8 pt-6 border-t border-border-color text-center">
           <button
             onClick={() => setIsSignUp(!isSignUp)}
-            className="text-slate-400 hover:text-blue-400 text-sm transition"
+            className="text-slate-500 hover:text-accent-lime text-sm transition"
           >
             {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
           </button>

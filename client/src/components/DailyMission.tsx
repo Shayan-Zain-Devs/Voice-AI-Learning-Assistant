@@ -42,32 +42,32 @@ export default function DailyMission({ selectedBookId }: DailyMissionProps) {
     }, [selectedBookId]);
 
     if (loading) return (
-        <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl animate-pulse">
+        <div className="bg-bg-card border border-border-color p-6 rounded-2xl animate-pulse mt-12">
             <Loader2 className="animate-spin text-slate-700 mx-auto" />
         </div>
     );
 
     if (!mission) return (
-        <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl">
-            <h2 className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-4">Today's Mission</h2>
+        <div className="bg-bg-card border border-border-color p-6 rounded-2xl mt-12">
+            <h2 className="text-slate-500 text-[10px] font-bold uppercase tracking-[0.2em] mb-4">Today's Mission</h2>
             <p className="text-slate-400 text-sm italic">No tasks scheduled for today. Check your roadmap for upcoming sessions!</p>
         </div>
     );
 
     return (
-        <div className="bg-slate-900 border border-slate-800 p-6 rounded-2xl hover:border-blue-500/30 transition-colors group">
-            <div className="flex items-center justify-between mb-4">
-                <h2 className="text-slate-400 text-xs font-bold uppercase tracking-widest">Today's Mission</h2>
-                <Target size={16} className="text-blue-500 group-hover:animate-bounce" />
+        <div className="bg-bg-card border border-border-color p-6 rounded-2xl hover:border-accent-lime/30 transition-colors group mt-12 shadow-sm">
+            <div className="flex items-center justify-between mb-6">
+                <h2 className="text-slate-500 text-[10px] font-bold uppercase tracking-[0.2em]">Today's Mission</h2>
+                <div className="w-2 h-2 rounded-full bg-accent-lime shadow-[0_0_8px_rgba(190,242,100,0.4)] animate-pulse"></div>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-6">
                 <div>
-                    <p className="text-2xl font-black text-white leading-tight mb-1">
+                    <p className="text-2xl font-black text-white leading-tight mb-2">
                         {mission.passing_criteria?.[0] || `Pages ${mission.page_range}`}
                     </p>
-                    <div className="flex items-center gap-2 text-slate-400 text-xs font-medium">
-                        <BookOpen size={12} className="text-blue-500/50" />
+                    <div className="flex items-center gap-2 text-slate-400 text-[10px] font-bold uppercase tracking-widest">
+                        <BookOpen size={12} className="text-accent-lime/50" />
                         {mission.textbooks?.title}
                     </div>
                 </div>
@@ -75,14 +75,14 @@ export default function DailyMission({ selectedBookId }: DailyMissionProps) {
                 <div className="flex flex-wrap gap-2">
                     {/* Show pages as a tag if the title is now the topic */}
                     {mission.passing_criteria?.[0] && (
-                        <span className="bg-blue-500/10 text-blue-400 border border-blue-500/20 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-tighter">
+                        <span className="bg-accent-lime/10 text-accent-lime border border-accent-lime/20 px-3 py-1 rounded-full text-[10px] font-mono font-bold uppercase tracking-tighter">
                             Pages {mission.page_range}
                         </span>
                     )}
                     
                     {/* Show other topics if they exist */}
                     {mission.passing_criteria?.slice(1).map((topic: string) => (
-                        <span key={topic} className="bg-slate-800/40 text-slate-400 border border-slate-800 px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-tighter">
+                        <span key={topic} className="bg-white/5 text-slate-400 border border-border-color px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-tighter">
                             #{topic}
                         </span>
                     ))}

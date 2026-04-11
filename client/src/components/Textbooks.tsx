@@ -136,7 +136,7 @@ export default function Textbooks({
             {/* SECTION: UPLOAD FORM */}
             <section className="space-y-4">
                 <h2 className="text-xl font-bold flex items-center gap-2">
-                    <Upload className="text-blue-500" size={22} />
+                    <Upload className="text-accent-lime" size={22} />
                     Knowledge Injection
                 </h2>
 
@@ -146,7 +146,7 @@ export default function Textbooks({
                         <input
                             type="text"
                             placeholder="e.g. Quantum Physics"
-                            className="bg-slate-900 border border-slate-800 p-3 rounded-xl focus:border-blue-500 outline-none transition"
+                            className="bg-bg-card border border-border-color p-3 rounded-xl focus:border-accent-lime outline-none transition text-white"
                             value={title}
                             onChange={(e) => setTitle(e.target.value)}
                         />
@@ -155,7 +155,7 @@ export default function Textbooks({
                         <label className="text-xs text-slate-500 uppercase font-bold ml-1">Exam Date (Optional)</label>
                         <input
                             type="date"
-                            className="bg-slate-900 border border-slate-800 p-3 rounded-xl focus:border-blue-500 outline-none text-slate-400"
+                            className="bg-bg-card border border-border-color p-3 rounded-xl focus:border-accent-lime outline-none text-slate-400"
                             value={examDate}
                             onChange={(e) => setExamDate(e.target.value)}
                         />
@@ -165,18 +165,18 @@ export default function Textbooks({
                 {/* DRAG & DROP ZONE */}
                 <label className={`
                     relative group cursor-pointer overflow-hidden
-                    bg-slate-900 border-2 border-dashed border-slate-800 rounded-3xl p-12 
+                    bg-bg-main border-2 border-dashed border-border-color rounded-3xl p-12 
                     flex flex-col items-center justify-center 
-                    hover:border-blue-500/50 transition-all
+                    hover:border-accent-lime/50 transition-all
                     ${isGlobalProcessing ? 'opacity-50 pointer-events-none' : ''}
                 `}>
-                    <div className="absolute inset-0 bg-blue-600/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+                    <div className="absolute inset-0 bg-accent-lime/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
 
-                    <div className="w-16 h-16 bg-blue-600/10 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
+                    <div className="w-16 h-16 bg-accent-lime/10 rounded-full flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
                         {isGlobalProcessing ? (
-                            <Loader2 className="text-blue-500 animate-spin" size={32} />
+                            <Loader2 className="text-accent-lime animate-spin" size={32} />
                         ) : (
-                            <Upload className="text-blue-500" size={32} />
+                            <Upload className="text-accent-lime" size={32} />
                         )}
                     </div>
 
@@ -204,7 +204,7 @@ export default function Textbooks({
                 <div className="flex justify-between items-end mb-6">
                     <div>
                         <h2 className="text-xl font-bold flex items-center gap-2">
-                            <BookOpen className="text-blue-500" size={22} />
+                            <BookOpen className="text-accent-lime" size={22} />
                             Your Knowledge Library
                         </h2>
                         <p className="text-slate-500 text-sm">Select a book to start a voice study session.</p>
@@ -226,10 +226,10 @@ export default function Textbooks({
                         {books.map((book) => (
                             <div
                                 key={book.id}
-                                className="bg-slate-900 border border-slate-800 p-5 rounded-2xl flex items-center justify-between group hover:border-slate-700 transition"
+                                className="bg-bg-card border border-border-color p-5 rounded-2xl flex items-center justify-between group hover:border-accent-lime/50 transition"
                             >
                                 <div className="flex items-center gap-4">
-                                    <div className="w-12 h-12 bg-slate-800 rounded-xl flex items-center justify-center text-blue-400 group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                                    <div className="w-12 h-12 bg-bg-main rounded-xl flex items-center justify-center text-accent-lime group-hover:bg-accent-lime group-hover:text-black transition-colors font-mono font-bold border border-border-color">
                                         <FileText size={24} />
                                     </div>
                                     <div>
@@ -244,7 +244,7 @@ export default function Textbooks({
                                 </div>
 
                                 <div className="flex items-center gap-3">
-                                    <button className="px-4 py-2 bg-slate-800 hover:bg-blue-600 rounded-lg text-sm font-medium transition-colors">
+                                    <button className="px-4 py-2 bg-bg-main text-white hover:bg-accent-lime hover:text-black border border-border-color rounded-lg text-sm font-bold transition-colors">
                                         Study
                                     </button>
                                     <button

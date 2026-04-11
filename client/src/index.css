@@ -1,8 +1,41 @@
 @import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@700&display=swap');
 
-/* Keep your custom body styles below the import */
+@theme {
+  --color-bg-main: #09090b;
+  --color-bg-card: #121214;
+  --color-border-color: #27272a;
+  --color-accent-lime: #bef264;
+  --color-accent-glow: rgba(190, 242, 100, 0.1);
+  --font-inter: 'Inter', sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+}
+
+:root {
+  --bg-main: var(--color-bg-main);
+  --bg-card: var(--color-bg-card);
+  --border-color: var(--color-border-color);
+  --accent-glow: var(--color-accent-glow);
+  --accent-lime: var(--color-accent-lime);
+}
+
 body {
-  @apply bg-slate-950 text-white;
-  margin: 0;
-  font-family: sans-serif;
+  font-family: var(--font-inter);
+  background-color: var(--color-bg-main);
+  color: #f8fafc;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Glassmorphism utility */
+@utility glass-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  backdrop-filter: blur(10px);
+  border-radius: 12px;
+  transition: all 0.2s ease-in-out;
+  
+  &:hover {
+    border-color: var(--accent-lime);
+    box-shadow: 0 0 20px var(--accent-glow);
+  }
 }

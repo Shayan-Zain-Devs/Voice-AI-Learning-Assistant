@@ -34,13 +34,13 @@ function App() {
   if (!session) return <Auth />;
 
   return (
-    <div className="flex min-h-screen bg-slate-950 text-white relative">
+    <div className="flex min-h-screen bg-bg-main text-white relative">
       
       {/* 1. TOP PROGRESS BAR (Persistent) */}
       {isGlobalProcessing && (
-        <div className="fixed top-0 left-0 right-0 h-1 z-[100] bg-slate-900">
+        <div className="fixed top-0 left-0 right-0 h-1 z-[100] bg-white/5">
           <div 
-            className="h-full bg-blue-500 transition-all duration-700 ease-out shadow-[0_0_15px_rgba(59,130,246,0.6)]"
+            className="h-full bg-accent-lime transition-all duration-700 ease-out shadow-[0_0_15px_rgba(190,242,100,0.6)]"
             style={{ width: `${uploadProgress}%` }}
           ></div>
         </div>
@@ -52,8 +52,8 @@ function App() {
         
         {/* 2. FLOATING PROCESSING STATUS (Persistent) */}
         {isGlobalProcessing && (
-          <div className="fixed bottom-8 right-8 bg-slate-900 border border-slate-800 p-5 rounded-2xl shadow-2xl flex items-center gap-4 animate-in slide-in-from-right-8 z-50">
-            <div className="w-12 h-12 rounded-full border-4 border-blue-500/10 border-t-blue-500 animate-spin"></div>
+          <div className="fixed bottom-8 right-8 bg-bg-card border border-border-color p-5 rounded-2xl shadow-2xl flex items-center gap-4 animate-in slide-in-from-right-8 z-50">
+            <div className="w-12 h-12 rounded-full border-4 border-accent-lime/10 border-t-accent-lime animate-spin"></div>
             <div>
                <p className="text-sm font-bold text-white">AI Engine Working... {uploadProgress}%</p>
                <p className="text-xs text-slate-500">Injecting knowledge & building roadmap.</p>
