@@ -128,23 +128,28 @@ async def generate_roadmap(textbook_id: str = Form(...), user_id: str = Form(...
         
         context_summary = "\n".join([f"P{s['page_number']}: {s['content'][:150]}" for s in segments_res.data])
 
-        # 2. THE PIPE PROMPT: Much more stable than JSON for long lists
+        # 2. THE JSON PROMPT: Now using OpenAI with structured output
         system_prompt = (
-            f"You are a study planner for the book '{book['title']}'. "
-            f"Generate a list of exactly {days_available} study topics (short, 2-3 words each). "
-            f"Separate each topic with a '|' symbol. "
-            f"Return ONLY the topics separated by pipes. Example: Introduction | DFA Basics | NFA Logic"
+            f"You are a professional study planner for the book '{book['title']}'. "
+            "Your task is to create a structured list of study topics based on the book summary provided. "
+            f"You must generate exactly {days_available} topics, one for each day. "
+            "Each topic should be concise (2-4 words) and educational. "
+            "Return the response in JSON format."
         )
-        user_prompt = f"Book Summary:\n{context_summary}"
+        user_prompt = (
+            f"Book Summary:\n{context_summary}\n\n"
+            f"Required Days: {days_available}\n"
+            "Output Format: {\"topics\": [\"Topic 1\", \"Topic 2\", ...]}"
+        )
         
-        ai_response = await get_ai_response(system_prompt, user_prompt)
+        ai_response = await get_ai_response(system_prompt, user_prompt, json_mode=True)
         
-        # 3. ROBUST PARSING (No JSON required)
-        if ai_response and "|" in ai_response:
-            # Split by pipe, clean up whitespace and remove any "Day X:" prefixes the AI might add
-            ai_topics = [re.sub(r'Day \d+:|Day \d+\s*-', '', t).strip() for t in ai_response.split("|")]
-        else:
-            print(f"AI response was messy or empty: {ai_response}")
+        # 3. STRUCTURED PARSING
+        try:
+            data = json.loads(ai_response)
+            ai_topics = data.get("topics", [])
+        except Exception as e:
+            print(f"AI response parsing error: {e}")
             ai_topics = []
 
         # 4. BUILD THE SCHEDULE

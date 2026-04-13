@@ -1,37 +1,35 @@
 import os
-import httpx
 import json
 import re
+from openai import AsyncOpenAI
 from dotenv import load_dotenv
 # Import our secure tools from the MCP Server
 from mcp_server import fetch_textbook_content, secure_log_quiz_score
 
 load_dotenv()
 
-OPENROUTER_KEY = os.getenv("OPENROUTER_API_KEY")
-MODEL_NAME = "nvidia/nemotron-3-super-120b-a12b:free" 
+# Initialize OpenAI Client
+client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+MODEL_NAME = "gpt-4o-mini" 
 
-async def get_ai_response(system_prompt: str, user_prompt: str):
-    """Core utility to talk to the LLM via OpenRouter."""
-    headers = {
-        "Authorization": f"Bearer {OPENROUTER_KEY}",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "model": MODEL_NAME,
-        "messages": [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
-        ]
-    }
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers=headers, json=payload, timeout=60.0
+async def get_ai_response(system_prompt: str, user_prompt: str, json_mode: bool = False):
+    """Core utility to talk to the LLM via OpenAI."""
+    response_format = {"type": "json_object"} if json_mode else {"type": "text"}
+    
+    try:
+        response = await client.chat.completions.create(
+            model=MODEL_NAME,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            response_format=response_format,
+            timeout=60.0
         )
-        if response.status_code != 200: return None
-        data = response.json()
-        return data['choices'][0]['message']['content']
+        return response.choices[0].message.content
+    except Exception as e:
+        print(f"OpenAI API Error: {e}")
+        return None
 
 # --- PRIMARY MCP AGENTIC FUNCTIONS ---
 
@@ -51,19 +49,25 @@ async def generate_voice_quiz_mcp(textbook_id: str, page_range: str, topics: lis
     topic_str = ", ".join(topics)
     system_prompt = (
         "You are an expert academic tutor. Based on the textbook context provided, "
-        "generate EXACTLY 5 unique, short, conversational questions. "
-        "Return ONLY a JSON array of strings. Example: [\"Q1\", \"Q2\", ...]"
+        "generate exactly 5 unique, conversational questions that test conceptual understanding. "
+        "The questions should follow a logical pedagogical progression (easier to harder). "
+        "Return the response in JSON format."
     )
-    user_prompt = f"Topics: {topic_str}\n\nContext from MCP: {context}"
+    user_prompt = (
+        f"Topics to focus on: {topic_str}\n\n"
+        f"Textbook Context: {context}\n\n"
+        "Output Format: {\"questions\": [\"string1\", \"string2\", \"string3\", \"string4\", \"string5\"]}"
+    )
     
-    raw_response = await get_ai_response(system_prompt, user_prompt)
+    raw_response = await get_ai_response(system_prompt, user_prompt, json_mode=True)
     
     try:
-        clean_json = re.sub(r'```json|```', '', raw_response).strip()
-        questions = json.loads(clean_json)
+        data = json.loads(raw_response)
+        questions = data.get("questions", [])
         return questions[:5], context
-    except:
-        return ["Error generating questions via MCP bridge."], ""
+    except Exception as e:
+        print(f"Error parsing quiz questions: {e}")
+        return ["Error generating questions via OpenAI."], ""
 
 
 async def evaluate_and_log_mcp(user_id, schedule_id, textbook_id, questions, answers, context, topic):
@@ -79,27 +83,31 @@ async def evaluate_and_log_mcp(user_id, schedule_id, textbook_id, questions, ans
 
     # 2. Evaluate
     system_prompt = (
-        "You are an academic examiner. Evaluate the transcript against the context. "
-        "Calculate an overall score (0-100). Provide feedback (max 2 sentences). "
-        "Return ONLY a JSON object: {\"score\": int, \"feedback\": \"string\", \"topics_to_review\": [\"string\"]}"
+        "You are a professional academic examiner. Evaluate the student's transcript against the provided textbook context. "
+        "Provide an overall score (0-100) based on accuracy and conceptual depth. "
+        "Provide a concise, encouraging, yet critical feedback (max 3 sentences). "
+        "List specific topics or concepts the student should review for improvement. "
+        "Return the response in JSON format."
     )
-    user_prompt = f"CONTEXT:\n{context[:3000]}\n\nTRANSCRIPT:\n{transcript}"
+    user_prompt = (
+        f"CONTEXT:\n{context[:4000]}\n\n"
+        f"TRANSCRIPT (Q&A Session):\n{transcript}\n\n"
+        "Output Format: {\"score\": int, \"feedback\": \"string\", \"topics_to_review\": [\"string\"]}"
+    )
     
-    raw_response = await get_ai_response(system_prompt, user_prompt)
+    raw_response = await get_ai_response(system_prompt, user_prompt, json_mode=True)
     
     try:
-        # Extract JSON even if AI adds conversational filler
-        match = re.search(r'\{.*\}', raw_response, re.DOTALL)
-        report = json.loads(match.group(0))
+        report = json.loads(raw_response)
 
         # 3. Securely Log via MCP Tool
-        print(f"--- [MCP BRIDGE] Logging {topic}: {report['score']}% ---")
+        print(f"--- [MCP BRIDGE] Logging {topic}: {report.get('score', 0)}% ---")
         await secure_log_quiz_score(
             user_id=user_id,
             schedule_id=schedule_id,
             topic=topic,
-            score=report['score'],
-            feedback=report['feedback']
+            score=report.get('score', 0),
+            feedback=report.get('feedback', "")
         )
         return report
     except Exception as e:

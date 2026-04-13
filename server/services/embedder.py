@@ -1,9 +1,11 @@
-from langchain_huggingface import HuggingFaceEmbeddings
+from langchain_openai import OpenAIEmbeddings
+import os
+from dotenv import load_dotenv
 
-# Using your requested model
-model_name = "sentence-transformers/multi-qa-distilbert-cos-v1"
+load_dotenv()
 
-embeddings = HuggingFaceEmbeddings(
-    model_name=model_name,
-    model_kwargs={'device': 'cpu'}
+# Using OpenAI text-embedding-3-small (Default 1536 dimensions)
+embeddings = OpenAIEmbeddings(
+    model="text-embedding-3-small",
+    openai_api_key=os.getenv("OPENAI_API_KEY")
 )
