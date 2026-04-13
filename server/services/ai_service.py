@@ -3,28 +3,20 @@ import httpx
 import json
 import re
 from dotenv import load_dotenv
+# Import our secure tools from the MCP Server
+from mcp_server import fetch_textbook_content, secure_log_quiz_score
 
 load_dotenv()
 
 OPENROUTER_KEY = os.getenv("OPENROUTER_API_KEY")
-# You can change this to "openai/gpt-4o" later
-# Change this line in ai_service.py
 MODEL_NAME = "nvidia/nemotron-3-super-120b-a12b:free" 
 
 async def get_ai_response(system_prompt: str, user_prompt: str):
+    """Core utility to talk to the LLM via OpenRouter."""
     headers = {
         "Authorization": f"Bearer {OPENROUTER_KEY}",
         "Content-Type": "application/json"
     }
-    
-    # Optional OpenRouter headers
-    site_url = os.getenv("SITE_URL")
-    site_name = os.getenv("SITE_NAME")
-    if site_url:
-        headers["HTTP-Referer"] = site_url
-    if site_name:
-        headers["X-Title"] = site_name
-
     payload = {
         "model": MODEL_NAME,
         "messages": [
@@ -32,87 +24,84 @@ async def get_ai_response(system_prompt: str, user_prompt: str):
             {"role": "user", "content": user_prompt}
         ]
     }
-
     async with httpx.AsyncClient() as client:
         response = await client.post(
             "https://openrouter.ai/api/v1/chat/completions",
-            headers=headers,
-            json=payload,
-            timeout=60.0
+            headers=headers, json=payload, timeout=60.0
         )
-        
-        if response.status_code != 200:
-            print(f"AI Error: {response.text}")
-            return None
-            
+        if response.status_code != 200: return None
         data = response.json()
-        if 'choices' not in data:
-            print(f"OpenRouter Error or Unexpected Response: {data}")
-            return None
-            
         return data['choices'][0]['message']['content']
 
+# --- PRIMARY MCP AGENTIC FUNCTIONS ---
 
-async def generate_voice_quiz(context: str, topics: list):
+async def generate_voice_quiz_mcp(textbook_id: str, page_range: str, topics: list):
     """
-    Generates a list of 5 conceptual questions in one go.
+    AGENTIC FLOW: 
+    1. AI decides it needs context.
+    2. Uses MCP Bridge to fetch textbook data.
+    3. Generates 5 unique conceptual questions.
     """
+    print(f"--- [MCP BRIDGE] Fetching context for {page_range} ---")
+    
+    # 1. Fetch context via MCP Tool
+    context = await fetch_textbook_content(textbook_id, page_range)
+
+    # 2. Generate Questions
     topic_str = ", ".join(topics)
     system_prompt = (
         "You are an expert academic tutor. Based on the textbook context provided, "
         "generate EXACTLY 5 unique, short, conversational questions. "
-        "Each question should test a different aspect of the topics provided. "
-        "Return ONLY a JSON array of strings. Example: [\"Question 1\", \"Question 2\", ...]"
+        "Return ONLY a JSON array of strings. Example: [\"Q1\", \"Q2\", ...]"
     )
-    user_prompt = f"Topics: {topic_str}\n\nContext: {context}"
+    user_prompt = f"Topics: {topic_str}\n\nContext from MCP: {context}"
     
     raw_response = await get_ai_response(system_prompt, user_prompt)
-    
-    if not raw_response:
-        return ["AI Service is currently busy or unavailable. Please try again in 1 minute."]
     
     try:
         clean_json = re.sub(r'```json|```', '', raw_response).strip()
         questions = json.loads(clean_json)
-        # Ensure we always return exactly 5, even if AI failed
-        return questions[:5] if isinstance(questions, list) else ["Could not generate questions."]
-    except Exception as e:
-        print(f"Quiz Generation Parse Error: {e}")
-        return ["Error generating quiz. Please try again."]
+        return questions[:5], context
+    except:
+        return ["Error generating questions via MCP bridge."], ""
 
-async def evaluate_quiz_session(questions: list, answers: list, context: str):
+
+async def evaluate_and_log_mcp(user_id, schedule_id, textbook_id, questions, answers, context, topic):
+    """
+    AGENTIC FLOW:
+    1. AI evaluates the voice transcript against context.
+    2. AI uses MCP Tool to SECURELY log the result with dynamic topic name.
+    """
+    # 1. Build Transcript
     transcript = ""
     for i in range(len(questions)):
         transcript += f"Q{i+1}: {questions[i]}\nStudent A{i+1}: {answers[i]}\n\n"
 
+    # 2. Evaluate
     system_prompt = (
         "You are an academic examiner. Evaluate the transcript against the context. "
         "Calculate an overall score (0-100). Provide feedback (max 2 sentences). "
-        "Return ONLY a JSON object. No other text. "
-        "Format: {\"score\": int, \"feedback\": \"string\", \"topics_to_review\": [\"string\"]}"
+        "Return ONLY a JSON object: {\"score\": int, \"feedback\": \"string\", \"topics_to_review\": [\"string\"]}"
     )
-    
-    # We truncate the context to ensure the AI doesn't get overwhelmed
-    user_prompt = f"TEXTBOOK CONTEXT (Excerpt):\n{context[:3000]}\n\nEXAM TRANSCRIPT:\n{transcript}"
+    user_prompt = f"CONTEXT:\n{context[:3000]}\n\nTRANSCRIPT:\n{transcript}"
     
     raw_response = await get_ai_response(system_prompt, user_prompt)
     
-    if not raw_response:
-        return {"score": 0, "feedback": "AI Service Timeout. Please try again.", "topics_to_review": []}
-
     try:
-        # ADVANCED JSON EXTRACTION: Find the first '{' and last '}'
-        # This prevents the "Evaluation failed" error if the AI adds extra text.
+        # Extract JSON even if AI adds conversational filler
         match = re.search(r'\{.*\}', raw_response, re.DOTALL)
-        if match:
-            json_str = match.group(0)
-            return json.loads(json_str)
-        else:
-            raise ValueError("No JSON found in response")
-            
+        report = json.loads(match.group(0))
+
+        # 3. Securely Log via MCP Tool
+        print(f"--- [MCP BRIDGE] Logging {topic}: {report['score']}% ---")
+        await secure_log_quiz_score(
+            user_id=user_id,
+            schedule_id=schedule_id,
+            topic=topic,
+            score=report['score'],
+            feedback=report['feedback']
+        )
+        return report
     except Exception as e:
-        print(f"Session Evaluation Error: {e} | Raw: {raw_response}")
-        # Secondary Fallback: Try to find a score number manually if JSON is totally broken
-        score_match = re.search(r'"score":\s*(\d+)', raw_response)
-        score = int(score_match.group(1)) if score_match else 0
-        return {"score": score, "feedback": "Evaluation processed with fallback logic.", "topics_to_review": []}
+        print(f"MCP Session Evaluation Error: {e}")
+        return {"score": 0, "feedback": "Evaluation/Logging failed via MCP.", "topics_to_review": []}

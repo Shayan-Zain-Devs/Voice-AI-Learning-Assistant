@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from database import supabase_client
 from services.pdf_processor import process_pdf
 from services.embedder import embeddings
-from services.ai_service import get_ai_response, generate_voice_quiz, evaluate_quiz_session
+from services.ai_service import get_ai_response, generate_voice_quiz_mcp, evaluate_and_log_mcp
 from pypdf import PdfReader
 from datetime import datetime, timedelta
 import json
@@ -183,27 +183,15 @@ async def generate_roadmap(textbook_id: str = Form(...), user_id: str = Form(...
 
 @app.post("/voice/start-session")
 async def start_voice_session(schedule_id: str = Form(...), textbook_id: str = Form(...)):
+    # Get the basic task info
     sched = supabase_client.table("daily_schedules").select("*").eq("id", schedule_id).single().execute()
-    page_range = sched.data['page_range']
-
-    # CRASH-PROOF LOGIC
-    if "-" in page_range:
-        try:
-            start_pg, end_pg = map(int, page_range.split('-'))
-            segments = supabase_client.table("textbook_segments") \
-                .select("content") \
-                .eq("textbook_id", textbook_id) \
-                .gte("page_number", start_pg) \
-                .lte("page_number", end_pg) \
-                .limit(8).execute()
-        except:
-            segments = supabase_client.table("textbook_segments").select("content").eq("textbook_id", textbook_id).limit(8).execute()
-    else:
-        # If it's REVISION or anything else, just grab 8 relevant segments from the book
-        segments = supabase_client.table("textbook_segments").select("content").eq("textbook_id", textbook_id).limit(8).execute()
-
-    context = " ".join([s['content'] for s in segments.data])
-    questions = await generate_voice_quiz(context, sched.data['passing_criteria'])
+    
+    # Hand off to MCP Agent
+    questions, context = await generate_voice_quiz_mcp(
+        textbook_id=textbook_id,
+        page_range=sched.data['page_range'],
+        topics=sched.data['passing_criteria']
+    )
     return {"questions": questions, "context": context}
 
 @app.post("/voice/complete-session")
@@ -211,33 +199,29 @@ async def complete_voice_session(
     user_id: str = Form(...),
     schedule_id: str = Form(...),
     textbook_id: str = Form(...),
-    questions: str = Form(...), # JSON string of list
-    answers: str = Form(...),   # JSON string of list
+    questions: str = Form(...), 
+    answers: str = Form(...),   
     context: str = Form(...)
 ):
     q_list = json.loads(questions)
     a_list = json.loads(answers)
 
-    # 1. Get the batch evaluation
-    report = await evaluate_quiz_session(q_list, a_list, context)
+    
+    sched = supabase_client.table("daily_schedules").select("*").eq("id", schedule_id).single().execute()
+    topic_name = sched.data['passing_criteria'][0] if sched.data['passing_criteria'] else "General Study"
 
-    # 2. Log to Zain's study_logs (Triggers mastery update automatically)
-    supabase_client.table("study_logs").insert({
-        "user_id": user_id,
-        "schedule_id": schedule_id,
-        "topic": "Daily Voice Quiz",
-        "score": report['score'],
-        "ai_feedback": report['feedback']
-    }).execute()
+    report = await evaluate_and_log_mcp(
+        user_id=user_id,
+        schedule_id=schedule_id,
+        textbook_id=textbook_id,
+        questions=q_list,
+        answers=a_list,
+        context=context,
+        topic=topic_name # Pass the real topic name
+    )
 
-   # 3. NEW LOGIC: Only mark the schedule as 'completed' if they pass!
-    # If they fail, status stays 'pending', allowing them to retake it immediately.
+    # Status Update Logic
     if report['score'] >= 60:
-        supabase_client.table("daily_schedules") \
-            .update({"status": "completed"}) \
-            .eq("id", schedule_id).execute()
-        print(f"User {user_id} passed! Task {schedule_id} marked as completed.")
-    else:
-        print(f"User {user_id} failed. Task {schedule_id} remains pending for retake.")
-
-    return report        
+        supabase_client.table("daily_schedules").update({"status": "completed"}).eq("id", schedule_id).execute()
+    
+    return report  
