@@ -1,4 +1,5 @@
 import { Mic2, BookOpen, BarChart3, Settings, LogOut, Library } from 'lucide-react';
+import { supabase } from '../supabaseClient';
 
 interface SidebarProps {
     activeTab: string;
@@ -6,6 +7,11 @@ interface SidebarProps {
 }
 
 export default function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
+    const handleLogout = async () => {
+        const { error } = await supabase.auth.signOut();
+        if (error) console.error('Error logging out:', error.message);
+    };
+
     const menuItems = [
         { id: 'study', label: 'Voice Study', icon: Mic2 },
         { id: 'library', label: 'My Textbooks', icon: Library },
@@ -38,7 +44,10 @@ export default function Sidebar({ activeTab, setActiveTab }: SidebarProps) {
             </nav>
 
             <div className="p-4 border-t border-border-color">
-                <button className="w-full flex items-center gap-3 px-4 py-3 text-slate-500 hover:text-red-400 transition">
+                <button 
+                    onClick={handleLogout}
+                    className="w-full flex items-center gap-3 px-4 py-3 text-slate-500 hover:text-red-400 transition"
+                >
                     <LogOut size={20} />
                     <span>Logout</span>
                 </button>

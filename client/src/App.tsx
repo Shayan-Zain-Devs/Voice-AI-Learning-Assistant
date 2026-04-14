@@ -91,8 +91,18 @@ function App() {
           )}
           {activeTab === 'analytics' && <MasteryHeatMap />}
           {activeTab === 'settings' && (
-            <div className="bg-slate-900 p-8 rounded-2xl border border-slate-800">
-              <h2 className="text-xl font-bold">Account: {session.user.email}</h2>
+            <div className="bg-bg-card p-8 rounded-2xl border border-border-color space-y-6">
+              <div>
+                <h2 className="text-xl font-bold text-white mb-2">Account Settings</h2>
+                <p className="text-slate-500 text-sm">Logged in as <span className="text-slate-200">{session.user.email}</span></p>
+              </div>
+              
+              <button 
+                onClick={() => supabase.auth.signOut()}
+                className="bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 px-6 py-3 rounded-xl font-bold text-sm transition-all flex items-center gap-2"
+              >
+                <Loader2 size={16} className="rotate-45" /> Sign Out from Device
+              </button>
             </div>
           )}
         </div>
