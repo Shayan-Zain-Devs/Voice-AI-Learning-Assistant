@@ -11,17 +11,27 @@
 
 This project is a **Voice-First AI Tutor** designed to help students master textbooks through real-time oral assessment and adaptive scheduling.  
 
-The system **injects knowledge from PDF textbooks into a vector database** and uses an AI "brain" to quiz students verbally.
+The system **injects knowledge from PDF textbooks into a vector database** and uses an AI "brain" powered by OpenAI and a specialized MCP (Model Context Protocol) Server to quiz students verbally, evaluate their responses, and adapt their study schedule dynamically.
 
 ---
 
 ## 🏗️ Tech Stack (Hybrid Architecture)  
 
-- **Frontend:** React.js (Vite) + Tailwind CSS + Web Speech API  
-- **Backend:** Python (FastAPI) + LangChain  
-- **AI Models:** HuggingFace `multi-qa-distilbert-cos-v1` (768-dim embeddings)  
-- **Database:** Supabase (PostgreSQL + pgvector)  
-- **Automation Engine:** n8n (for adaptive scheduling)  
+- **Frontend:** React.js (Vite) + Tailwind CSS + Web Speech API for real-time voice interactions.
+- **Backend:** Python (FastAPI) + LangChain + Model Context Protocol (MCP).
+- **AI Models:** 
+  - **OpenAI (`gpt-4o-mini`):** Powers the core conversational AI, evaluating transcripts and generating unique conceptual questions.
+  - **HuggingFace (`multi-qa-distilbert-cos-v1`):** Generates 768-dimensional embeddings for textbook content chunking and semantic search.
+- **Database:** Supabase (PostgreSQL + pgvector).
+- **Automation Engine:** n8n (for adaptive scheduling workflows).
+
+---
+
+## 🔌 Model Context Protocol (MCP) Server Integration
+
+This project leverages an **MCP Server** to safely provide the AI with specific tools, creating a seamless Agentic Flow:
+- **Context Fetching (`fetch_textbook_content`):** The AI autonomously decides when it needs context and uses the MCP bridge to fetch highly relevant textbook data based on vector similarity.
+- **Secure Logging (`secure_log_quiz_score`):** After evaluating a student's voice transcript, the AI securely logs the performance metrics (scores, feedback, topics to review) directly into the database through an authenticated MCP tool.
 
 ---
 
@@ -29,7 +39,7 @@ The system **injects knowledge from PDF textbooks into a vector database** and u
 
 ### 🔹 Hybrid Vector Schema  
 Combines:
-- Relational Data → (Schedules, Profiles)  
+- Relational Data → (Schedules, Profiles, Quiz Results)  
 - Vector Data → (Textbook Embeddings)  
 
 All within a single ACID-compliant system.
@@ -37,39 +47,63 @@ All within a single ACID-compliant system.
 ---
 
 ### 🔹 Row-Level Security (RLS)  
-- Implements a **Zero-Trust security model**  
-- Uses JWT-based access control  
-- Ensures complete data isolation between users  
+- Implements a **Zero-Trust security model**.
+- Uses JWT-based access control.
+- Ensures complete data isolation between users.
 
 ---
 
 ### 🔹 Automated Triggers  
-- **on_auth_user_created** → Syncs Auth with Profiles table  
-- **update_mastery_score** → Calculates moving averages using atomic upserts  
+- **on_auth_user_created** → Automatically syncs Supabase Auth with the custom Profiles table.
+- **update_mastery_score** → Calculates moving averages using atomic upserts to keep track of a student's performance over time.
 
 ---
 
 ### 🔹 Stored Procedures (RPC)  
-- **match_textbook_chunks** → Vector similarity search using cosine distance  
-- **adapt_schedule_on_failure** → Dynamically adjusts study roadmap  
+- **match_textbook_chunks** → Performs vector similarity search using cosine distance to retrieve context for the AI.
+- **adapt_schedule_on_failure** → Dynamically adjusts the student's study roadmap when they fail a concept.
 
 ---
 
 ### 🔹 Database Views  
-- **student_analytics** → Precomputed analytics for O(1) dashboard performance  
+- **student_analytics** → Precomputed analytics for O(1) dashboard performance, enabling instant metric loading.
+
+---
+
+## 🔄 The Interaction Loop
+
+1. **🟢 Onboarding**
+   - Student signs up.
+   - Database trigger automatically creates the student's profile.
+
+2. **📚 Knowledge Injection**
+   - Student or Admin uploads a PDF textbook.
+   - The backend chunks the text and generates 768-dim embeddings using HuggingFace.
+   - Embeddings are stored in the `textbook_segments` table using pgvector.
+
+3. **🎤 Voice Quiz (Agentic Flow)**
+   - The system initiates an oral quiz.
+   - **OpenAI** identifies topics and uses the **MCP Server** to retrieve contextual data.
+   - AI evaluates the student's spoken answers dynamically against the textbook context.
+   - The AI securely logs the score and provides actionable feedback via MCP tools.
+
+4. **🔁 Adaptivity**
+   - If the student struggles or fails:
+   - The schedule is recalculated automatically.
+   - Revision days are inserted.
+   - Future workload is adjusted dynamically to ensure mastery.
 
 ---
 
 ## 🛠️ Installation & Setup  
 
 ### 1️⃣ Database Setup  
-- Enable **pgvector extension** in Supabase  
-- Run SQL migration scripts  
-- Create storage bucket: `textbooks`  
+- Create a Supabase project.
+- Enable the **pgvector extension** in the database.
+- Run the provided SQL migration scripts to set up the schema, RPCs, and triggers.
+- Create a public storage bucket named: `textbooks` for PDF uploads.
 
----
-
-### 2️⃣ Backend (FastAPI)  
+### 2️⃣ Backend (FastAPI & MCP)  
 
 ```bash
 cd server
@@ -77,47 +111,44 @@ python -m venv venv
 .\venv\Scripts\activate
 pip install -r requirements.txt
 
-Run the server:
-
+# Run the server:
 uvicorn main:app --reload
-3️⃣ Frontend (React)
+```
+
+### 3️⃣ Frontend (React)
+
+```bash
 cd client
 npm install
 npm run dev
-🔑 Environment Variables
+```
 
-Create .env files in both client and server folders.
+### 🔑 Environment Variables
 
-📁 Client .env
+Create `.env` files in both the `client` and `server` directories.
+
+**📁 Client `.env`**
+```ini
 VITE_SUPABASE_URL=your_project_url
 VITE_SUPABASE_ANON_KEY=your_anon_public_key
-📁 Server .env
+```
+
+**📁 Server `.env`**
+```ini
+OPENAI_API_KEY=your_openai_api_key
 SUPABASE_URL=your_project_url
 SUPABASE_ANON_KEY=your_anon_public_key
 SUPABASE_SERVICE_ROLE_KEY=your_secret_master_key
-🔄 The Interaction Loop
-🟢 Onboarding
-Student signs up
-Trigger automatically creates profile
-📚 Knowledge Injection
-Upload PDF
-Backend chunks text
-Generates 768-dim embeddings
-Stores in textbook_segments
-🎤 Voice Quiz
-AI retrieves context using vector search
-Evaluates spoken answers
-🔁 Adaptivity
-If student fails:
-Schedule is recalculated
-Revision days are inserted
-Future workload is adjusted
-⚡ Key Highlight
+```
 
-This system combines:
+---
 
-AI (LLMs + embeddings)
-Advanced Databases (pgvector, RLS, triggers, RPCs)
-Real-time voice interaction
+## ⚡ Key Highlight
 
-to create a fully adaptive, intelligent learning assistant.
+This system seamlessly combines:
+- **State-of-the-art AI** (OpenAI GPT-4o-mini + HuggingFace Embeddings).
+- **Agentic Capabilities** (Model Context Protocol for autonomous tool calling).
+- **Advanced Databases** (Supabase pgvector, RLS, Triggers, RPCs).
+- **Real-time voice interaction** (Web Speech API).
+
+The result is a fully adaptive, intelligent, and autonomous learning assistant that closely mimics a human tutor.
