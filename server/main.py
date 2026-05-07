@@ -1,6 +1,7 @@
 import os
 import asyncio
 import shutil
+import redis
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from database import supabase_client
@@ -11,6 +12,10 @@ from pypdf import PdfReader
 from datetime import datetime, timedelta
 import json
 import re
+
+# Redis Configuration
+REDIS_URL = os.environ.get("REDIS_URL", "redis://localhost:6379")
+redis_client = redis.from_url(REDIS_URL, decode_responses=True)
 
 app = FastAPI()
 
@@ -55,45 +60,38 @@ async def upload_textbook(
         pdf_url = supabase_client.storage.from_("textbooks").get_public_url(storage_path)
         print(f"[{get_time()}] Phase 3: Storage upload complete. URL: {pdf_url}")
 
-        textbook_res = supabase_client.table("textbooks").insert({
-            "user_id": user_id,
-            "title": title,
-            "pdf_url": pdf_url,
-            "total_pages": total_pages,
-            "exam_date": exam_date
-        }).execute()
-        
-        textbook_id = textbook_res.data[0]['id']
-        print(f"[{get_time()}] Phase 4: Database record created. ID: {textbook_id}")
-
-        print(f"[{get_time()}] Phase 5: Processing PDF text segments...")
+        print(f"[{get_time()}] Phase 4: Processing PDF text segments...")
         documents = process_pdf(temp_file)
-        print(f"[{get_time()}] Phase 5: PDF processed into {len(documents)} segments.")
+        print(f"[{get_time()}] Phase 4: PDF processed into {len(documents)} segments.")
         
-        chunks_to_insert = []
         texts = [doc.page_content.replace("\u0000", "") for doc in documents]
         
-        print(f"[{get_time()}] Phase 6: Generating embeddings for {len(texts)} chunks...")
+        print(f"[{get_time()}] Phase 5: Generating embeddings for {len(texts)} chunks...")
         vector_list = embeddings.embed_documents(texts)
-        print(f"[{get_time()}] Phase 6: Embeddings generated.")
+        print(f"[{get_time()}] Phase 5: Embeddings generated.")
 
+        chunks_to_insert = []
         for i, doc in enumerate(documents):
             chunks_to_insert.append({
-                "textbook_id": textbook_id,
                 "content": texts[i],
                 "page_number": doc.metadata.get("page", 0) + 1,
                 "embedding": vector_list[i],
                 "metadata": doc.metadata
             })
 
-        # Efficiency Fix: Insert in batches of 100 to avoid Supabase CPU spikes
-        print(f"[{get_time()}] Phase 7: Inserting {len(chunks_to_insert)} chunks into 'textbook_segments'...")
-        for i in range(0, len(chunks_to_insert), 100):
-            batch_num = (i // 100) + 1
-            print(f"          > Batch {batch_num} (Lines {i} to {min(i+100, len(chunks_to_insert))})")
-            supabase_client.table("textbook_segments").insert(chunks_to_insert[i:i+100]).execute()
+        print(f"[{get_time()}] Phase 6: Executing Transactional RPC for textbook and {len(chunks_to_insert)} segments...")
+        # Call the Supabase RPC function for atomic insertion
+        rpc_res = supabase_client.rpc("create_textbook_with_segments", {
+            "p_user_id": user_id,
+            "p_title": title,
+            "p_pdf_url": pdf_url,
+            "p_total_pages": total_pages,
+            "p_exam_date": exam_date,
+            "p_segments": chunks_to_insert
+        }).execute()
 
-        print(f"[{get_time()}] Phase 8: Upload and processing complete!")
+        textbook_id = rpc_res.data['id']
+        print(f"[{get_time()}] Phase 7: Upload and processing complete! ID: {textbook_id}")
         return {"status": "success", "textbook_id": textbook_id, "chunks_processed": len(chunks_to_insert)}
 
     except Exception as e:
@@ -188,6 +186,16 @@ async def generate_roadmap(textbook_id: str = Form(...), user_id: str = Form(...
 
 @app.post("/voice/start-session")
 async def start_voice_session(schedule_id: str = Form(...), textbook_id: str = Form(...)):
+    cache_key = f"quiz:{schedule_id}"
+    
+    # Check Redis Cache
+    cached_data = redis_client.get(cache_key)
+    if cached_data:
+        print(f"[Redis] Cache Hit for {cache_key}")
+        return json.loads(cached_data)
+
+    print(f"[Redis] Cache Miss for {cache_key}. Generating questions...")
+    
     # Get the basic task info
     sched = supabase_client.table("daily_schedules").select("*").eq("id", schedule_id).single().execute()
     
@@ -197,7 +205,13 @@ async def start_voice_session(schedule_id: str = Form(...), textbook_id: str = F
         page_range=sched.data['page_range'],
         topics=sched.data['passing_criteria']
     )
-    return {"questions": questions, "context": context}
+    
+    response_data = {"questions": questions, "context": context}
+    
+    # Store in Redis for 24 hours (86400 seconds)
+    redis_client.setex(cache_key, 86400, json.dumps(response_data))
+    
+    return response_data
 
 @app.post("/voice/complete-session")
 async def complete_voice_session(
